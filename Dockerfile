@@ -3,6 +3,11 @@ FROM rustlang/rust:nightly-slim AS builder
 
 WORKDIR /build
 
+# Install build dependencies first (needed for building Rust dependencies)
+RUN apt-get update && \
+    apt-get install -y pkg-config libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy dependency files first for better layer caching
 COPY Cargo.toml Cargo.lock ./
 
@@ -17,11 +22,8 @@ COPY . .
 # Force rebuild of the actual code
 RUN touch src/main.rs
 
-# Install build dependencies and build the release binary
-RUN apt-get update && \
-    apt-get install -y pkg-config libssl-dev && \
-    rm -rf /var/lib/apt/lists/* && \
-    cargo build --release
+# Build the release binary
+RUN cargo build --release
 
 # Runtime stage
 FROM debian:bookworm-slim
