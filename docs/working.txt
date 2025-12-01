@@ -1,0 +1,113 @@
+ImageKit Technical Working
+
+Overview
+- ImageKit is an Axum-based service that fetches, transforms, and serves images with signed URLs and disk caching.
+- It exposes three endpoints: GET /sign, GET /img, and POST /upload.
+- A simple static frontend is served from / (frontend/index.html) to exercise both flows.
+
+Configuration
+- Secret: IMAGEKIT_SECRET env var (default: local-dev-secret).
+- Cache dir: ./cache.
+- Max input size: 8 MB for remote downloads.
+- Allowed formats: jpeg, webp, avif.
+- Default output format: webp.
+
+Endpoints
+1) GET /sign
+   - Input: query params without sig (url, w?, h?, f?, q?, t?).
+   - Output: JSON { canonical, sig, signed_url } where signed_url is /img?canonical&sig=….
+   - Purpose: Generate server-side signature to protect /img requests.
+
+2) GET /img
+   - Input: signed query (url, w?, h?, f?, q?, t?, sig).
+   - Behavior:
+     a) Verify signature against canonical params (excluding sig) using HMAC-SHA256 with server secret.
+     b) If t is present, enforce expiry (current time <= t).
+     c) Cache lookup by canonical key; stream cached file on hit.
+     d) On miss: fetch remote image bytes with content-type check and size bound, decode, resize, encode to target format and quality, write to cache, stream to client.
+   - Output: image bytes with headers (Cache-Control, ETag, Content-Type).
+
+3) POST /upload
+   - Input: multipart form-data: file (required), w?, h?, f?, q? (optional).
+   - Behavior: decode uploaded image; resize and encode; return image bytes directly (no-store, no signature).
+   - Output: image bytes and Content-Type for selected format.
+
+Signing Algorithm
+- Canonical string is constructed by sorting all transformation params except sig and joining as key=value with &.
+- signature = hex(HMAC_SHA256(canonical, secret)).
+- Example canonical: "url=https://example.com/cat.jpg&f=webp&q=80&w=400".
+- Clients typically call /sign to get the signed_url, then request /img using that URL.
+
+Request Validation
+- Quality q in [1..100]; rejects q=0 or >100.
+- Height/Width must be positive integers if present.
+- Expiry t enforces absolute timestamp semantics; expired requests return 410 Gone.
+
+Fetching Remote Images
+- Downloader enforces Content-Type starts with image/ (e.g., image/jpeg, image/png, image/webp, image/avif).
+- Rejects pages that return text/html (e.g., generic sharing links) and payloads exceeding max_input_size.
+
+Transform Pipeline
+- Decode: ImageBytes::decode reads the source and infers original format.
+- Resize: resize_image applies optional width/height constraints; aspect handling follows library behavior.
+- Encode: encode_image produces target format (jpeg/webp/avif) at the given quality.
+
+Caching
+- Key: derived from canonical params (excluding sig), ensuring identical transforms map to the same cache entry.
+- Put: writes encoded bytes with appropriate file extension to cache dir.
+- Get: returns path if present; streamed via ReaderStream for efficient IO.
+- ETag: computed from key; included in response headers to support client-side caching.
+
+Responses
+- GET /img (cache hit or miss):
+  - Headers: Cache-Control: public, max-age=31536000, immutable; ETag: <key-derived>; Content-Type: image/*.
+  - Body: streamed file for minimal memory overhead.
+- POST /upload:
+  - Headers: Cache-Control: no-store; Content-Type: image/*.
+  - Body: encoded image bytes (direct response, not cached).
+
+Frontend Flows
+- Generate & Preview (remote):
+  1) Form collects url, w, h, f, q.
+  2) Calls /sign; receives signed_url.
+  3) Sets <img src> to signed_url and shows the result.
+- Upload & Preview (local):
+  1) Selects a local image file; optional w, h, f, q reused from the form.
+  2) Sends multipart POST to /upload.
+  3) Receives transformed image blob; displays via object URL.
+
+Error Handling
+- 401 Unauthorized: signature invalid.
+- 410 Gone: signature expired (t in the past).
+- 400 Bad Request: invalid params, decode/resize/encode errors, invalid multipart, missing file.
+- 500 Internal Server Error: cache write/read or filesystem errors.
+
+Running Locally
+- cargo run
+- Open http://127.0.0.1:8080/
+- Env override: IMAGEKIT_SECRET=your-secret cargo run
+
+Example Requests
+- Sign then fetch:
+  - GET /sign?url=https://upload.wikimedia.org/wikipedia/commons/3/3f/JPEG_example_flower.jpg&w=400&f=webp&q=80
+  - Then GET /img?url=…&w=400&f=webp&q=80&sig=…
+- Direct upload:
+  - curl -F "file=@/path/to/photo.jpg" -F w=400 -F f=webp \
+    http://127.0.0.1:8080/upload --output out.webp
+
+Troubleshooting
+- Preview shows broken image:
+  - Ensure the source URL is a direct image (Content-Type image/*), not an HTML page.
+  - Check server logs for decode/resize/encode errors.
+- Large images fail to fetch: increase max_input_size in config.
+- Upload returns error: verify file field name is "file" and the file is a valid image.
+
+Extension Points
+- Add persistent caching for uploads: write uploaded transforms to DiskCache and return a stable URL.
+- Add additional transforms: cropping, format-specific options, sharpening, etc.
+- Add authentication or rate limiting layers via Axum middleware.
+
+Security Considerations
+- All remote transforms require signed URLs, preventing unauthorized or tampered requests.
+- Expiry t can be used to limit validity windows.
+- Direct uploads bypass signing but are limited to local client files and capped by server validation.

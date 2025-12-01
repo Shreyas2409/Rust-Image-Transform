@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: imagekit
+    runtime: docker
+    plan: starter  # Can upgrade to 'standard', 'standard-plus', 'pro', etc.
+    region: oregon  # Or: frankfurt, singapore, ohio
+    branch: main
+    healthCheckPath: /sign?url=https://example.com/test.jpg
+    
+    # Auto-deploy on git push
+    autoDeploy: true
+    
+    # Environment variables
+    envVars:
+      - key: RUST_LOG
+        value: imagekit=info,tower_http=info
+      - key: IMAGEKIT_SECRET
+        generateValue: true  # Render will auto-generate a secure secret
+        # Or manually set: value: your-secret-here
+    
+    # Persistent disk for cache
+    disk:
+      name: imagekit-cache
+      mountPath: /app/cache
+      sizeGB: 10  # Free tier: 10GB, can increase up to 500GB
+    
+    # Optional: Custom domains
+    # domains:
+    #   - images.yourdomain.com

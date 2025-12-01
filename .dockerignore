@@ -1,0 +1,38 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+
+# Cache directory
+cache/
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (not needed in image)
+docs/
+*.md
+!README.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Local environment
+.env
+.env.local

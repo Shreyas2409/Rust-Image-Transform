@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ImageKit Demo</title>
+  <style>
+    :root { --bg: #0f172a; --card: #111827; --text: #e5e7eb; --accent: #4f46e5; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: var(--card); border-radius: 12px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+    form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    label { font-size: 0.9rem; opacity: 0.9; }
+    input, select { width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid #374151; background: #1f2937; color: var(--text); }
+    .full { grid-column: 1 / -1; }
+    button { background: var(--accent); color: #fff; border: none; padding: 0.6rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    button:hover { filter: brightness(1.1); }
+    .result { margin-top: 1rem; }
+    .result a { color: #93c5fd; word-break: break-all; }
+    .preview { margin-top: 1rem; display: flex; justify-content: center; }
+    img { max-width: 100%; border-radius: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>ImageKit Frontend</h1>
+      <form id="form">
+        <div class="full">
+          <label>Source URL</label>
+          <input type="url" id="url" placeholder="https://example.com/image.jpg" required />
+        </div>
+        <div>
+          <label>Width (w)</label>
+          <input type="number" id="w" min="1" placeholder="e.g., 400" />
+        </div>
+        <div>
+          <label>Height (h)</label>
+          <input type="number" id="h" min="1" placeholder="optional" />
+        </div>
+        <div>
+          <label>Format (f)</label>
+          <select id="f">
+            <option value="webp" selected>webp</option>
+            <option value="jpeg">jpeg</option>
+            <option value="avif">avif</option>
+          </select>
+        </div>
+        <div>
+          <label>Quality (q)</label>
+          <input type="number" id="q" min="1" max="100" value="80" />
+        </div>
+        <div class="full" style="display:flex; gap:0.75rem; align-items:center;">
+          <button type="submit">Generate & Preview</button>
+          <span id="status" aria-live="polite"></span>
+        </div>
+      </form>
+      <div class="result" id="result" hidden>
+        <div>Signed URL:</div>
+        <a id="signedUrl" href="#" target="_blank" rel="noopener noreferrer"></a>
+      </div>
+      <div class="preview">
+        <img id="preview" alt="Transformed preview" />
+      </div>
+      <hr style="border:none; border-top:1px solid #374151; margin:1rem 0;" />
+      <form id="uploadForm" class="full" style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:center;">
+        <div class="full">
+          <label>Upload Image</label>
+          <input type="file" id="file" accept="image/*" />
+        </div>
+        <div class="full" style="display:flex; gap:0.75rem; align-items:center;">
+          <button type="submit">Upload & Preview</button>
+          <span id="uploadStatus" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    const form = document.getElementById('form');
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+    const signedUrlEl = document.getElementById('signedUrl');
+    const previewEl = document.getElementById('preview');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadStatusEl = document.getElementById('uploadStatus');
+    const fileEl = document.getElementById('file');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.textContent = 'Signing…';
+      resultEl.hidden = true;
+      previewEl.removeAttribute('src');
+
+      const url = document.getElementById('url').value.trim();
+      const w = document.getElementById('w').value.trim();
+      const h = document.getElementById('h').value.trim();
+      const f = document.getElementById('f').value.trim();
+      const q = document.getElementById('q').value.trim();
+
+      const params = new URLSearchParams();
+      params.set('url', url);
+      if (w) params.set('w', w);
+      if (h) params.set('h', h);
+      if (f) params.set('f', f);
+      if (q) params.set('q', q);
+
+      try {
+        const resp = await fetch(`/sign?${params.toString()}`);
+        if (!resp.ok) throw new Error(`Sign failed: ${resp.status}`);
+        const data = await resp.json();
+        const { signed_url } = data;
+        signedUrlEl.textContent = `${location.origin}${signed_url}`;
+        signedUrlEl.href = signed_url;
+        resultEl.hidden = false;
+        previewEl.src = signed_url;
+        statusEl.textContent = 'Done';
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Error signing request';
+      }
+    });
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      uploadStatusEl.textContent = 'Uploading…';
+      resultEl.hidden = true; // hide signed URL block
+
+      const file = fileEl.files && fileEl.files[0];
+      if (!file) {
+        uploadStatusEl.textContent = 'Select an image file';
+        return;
+      }
+
+      const w = document.getElementById('w').value.trim();
+      const h = document.getElementById('h').value.trim();
+      const f = document.getElementById('f').value.trim();
+      const q = document.getElementById('q').value.trim();
+
+      const fd = new FormData();
+      fd.set('file', file);
+      if (w) fd.set('w', w);
+      if (h) fd.set('h', h);
+      if (f) fd.set('f', f);
+      if (q) fd.set('q', q);
+
+      try {
+        const resp = await fetch('/upload', { method: 'POST', body: fd });
+        if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
+        const blob = await resp.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        previewEl.src = objectUrl;
+        uploadStatusEl.textContent = 'Done';
+      } catch (err) {
+        console.error(err);
+        uploadStatusEl.textContent = 'Error uploading image';
+      }
+    });
+  </script>
+</body>
+</html>
