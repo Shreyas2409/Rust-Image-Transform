@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.75-slim as builder
+FROM rust:1.82-slim AS builder
 
 WORKDIR /build
 
@@ -29,9 +29,9 @@ FROM debian:bookworm-slim
 # Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y \
-        ca-certificates \
-        libssl3 \
-        curl && \
+    ca-certificates \
+    libssl3 \
+    curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
@@ -51,7 +51,7 @@ EXPOSE 8080
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:${PORT}/sign?url=https://example.com/test.jpg || exit 1
+    CMD curl -f http://localhost:${PORT}/sign?url=https://example.com/test.jpg || exit 1
 
 # Run the binary
 CMD ["imagekit"]
