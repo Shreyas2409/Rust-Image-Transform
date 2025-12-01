@@ -1,1 +1,43 @@
+# Rust build artifacts
 /target
+debug/
+*.pdb
+
+# Environment variables (IMPORTANT: Never commit secrets!)
+.env
+.env.*
+!.env.example
+.gitignore
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Cache directories
+cache/
+/cache
+
+# Logs
+*.log
+logs/
+
+# Ignore specific docs (keep only DEPLOYMENT.md, RUST_ARCHITECTURE_GUIDE.md, working.txt)
+docs/CODE_REVIEW.md
+docs/RENDER_DEPLOYMENT.md
+docs/IMPLEMENTATION_SUMMARY.md
+docs/REVIEW_SUMMARY.md
+
+# Render deployment (optional - uncomment if you want to keep render.yaml private)
+# render.yaml
+
+# Docker
+*.tar
+docker-compose.override.yml
