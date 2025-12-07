@@ -5,7 +5,7 @@ services:
     plan: starter  # Can upgrade to 'standard', 'standard-plus', 'pro', etc.
     region: oregon  # Or: frankfurt, singapore, ohio
     branch: main
-    healthCheckPath: /sign?url=https://example.com/test.jpg
+    healthCheckPath: /health  # Updated to use new observability endpoint
     
     # Auto-deploy on git push
     autoDeploy: true
@@ -18,11 +18,11 @@ services:
         generateValue: true  # Render will auto-generate a secure secret
         # Or manually set: value: your-secret-here
     
-    # Persistent disk for cache
+    # Persistent disk for cache (matches 10GB app limit)
     disk:
       name: imagekit-cache
       mountPath: /app/cache
-      sizeGB: 10  # Free tier: 10GB, can increase up to 500GB
+      sizeGB: 10  # Matches the Sled cache max_size in config
     
     # Optional: Custom domains
     # domains:
