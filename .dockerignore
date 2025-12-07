@@ -2,8 +2,8 @@
 target/
 **/*.rs.bk
 
-# Cache directory
-cache/
+# Runtime cache directory (not src/cache source code)
+/cache/
 
 # Git files
 .git/
