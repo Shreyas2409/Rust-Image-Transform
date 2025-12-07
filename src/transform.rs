@@ -6,21 +6,28 @@ use image::{DynamicImage, ExtendedColorType};
 use image::GenericImageView;
 use image::ImageEncoder;
 
-pub struct ImageBytes;
-
-impl ImageBytes {
-    pub fn decode(bytes: &[u8]) -> Result<(DynamicImage, Option<ImageFormat>), ImageKitError> {
-        let guessed = image::guess_format(bytes).map_err(|e| ImageKitError::TransformError(e.to_string()))?;
-        let img = image::load_from_memory_with_format(bytes, guessed)
-            .map_err(|e| ImageKitError::TransformError(e.to_string()))?;
-        let fmt = match guessed {
-            image::ImageFormat::WebP => Some(ImageFormat::webp),
-            image::ImageFormat::Jpeg => Some(ImageFormat::jpeg),
-            image::ImageFormat::Avif => Some(ImageFormat::avif),
-            _ => None,
-        };
-        Ok((img, fmt))
-    }
+/// Decode raw image bytes into a DynamicImage with optional format detection
+///
+/// # Arguments
+/// * `bytes` - Raw image bytes to decode
+///
+/// # Returns
+/// A tuple of (DynamicImage, Option<ImageFormat>) where the format is detected if supported
+pub fn decode_image(bytes: &[u8]) -> Result<(DynamicImage, Option<ImageFormat>), ImageKitError> {
+    let guessed = image::guess_format(bytes)
+        .map_err(|e| ImageKitError::TransformError(e.to_string()))?;
+    
+    let img = image::load_from_memory_with_format(bytes, guessed)
+        .map_err(|e| ImageKitError::TransformError(e.to_string()))?;
+    
+    let fmt = match guessed {
+        image::ImageFormat::WebP => Some(ImageFormat::webp),
+        image::ImageFormat::Jpeg => Some(ImageFormat::jpeg),
+        image::ImageFormat::Avif => Some(ImageFormat::avif),
+        _ => None,
+    };
+    
+    Ok((img, fmt))
 }
 
 pub fn resize_image(img: DynamicImage, w: Option<u32>, h: Option<u32>) -> Result<DynamicImage, ImageKitError> {

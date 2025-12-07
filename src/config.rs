@@ -20,11 +20,22 @@ impl std::fmt::Display for ImageFormat {
     }
 }
 
+// Quality constants
+pub const DEFAULT_QUALITY: u8 = 80;
+pub const MIN_QUALITY: u8 = 1;
+pub const MAX_QUALITY: u8 = 100;
+
+// Cache control headers
+pub const DEFAULT_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
+pub const NO_CACHE_CONTROL: &str = "no-store";
+
+
 #[derive(Debug, Clone)]
 pub struct ImageKitConfig {
     pub secret: String,
     pub cache_dir: PathBuf,
     pub max_input_size: usize, // bytes
+    pub max_cache_size: Option<u64>, // bytes - None for unlimited
     pub allowed_formats: Vec<ImageFormat>,
     pub default_format: Option<ImageFormat>,
 }
@@ -35,6 +46,7 @@ impl Default for ImageKitConfig {
             secret: String::new(),
             cache_dir: PathBuf::from("./cache"),
             max_input_size: 8 * 1024 * 1024,
+            max_cache_size: Some(10 * 1024 * 1024 * 1024), // 10GB default
             allowed_formats: vec![ImageFormat::jpeg, ImageFormat::webp, ImageFormat::avif],
             default_format: Some(ImageFormat::webp),
         }

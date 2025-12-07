@@ -3,159 +3,585 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ImageKit Demo</title>
+  <title>ImageKit - Drag & Drop Upload</title>
   <style>
-    :root { --bg: #0f172a; --card: #111827; --text: #e5e7eb; --accent: #4f46e5; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: var(--bg); color: var(--text); }
-    .wrap { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
-    .card { background: var(--card); border-radius: 12px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-    h1 { font-size: 1.5rem; margin: 0 0 1rem; }
-    form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-    label { font-size: 0.9rem; opacity: 0.9; }
-    input, select { width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid #374151; background: #1f2937; color: var(--text); }
-    .full { grid-column: 1 / -1; }
-    button { background: var(--accent); color: #fff; border: none; padding: 0.6rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
-    button:hover { filter: brightness(1.1); }
-    .result { margin-top: 1rem; }
-    .result a { color: #93c5fd; word-break: break-all; }
-    .preview { margin-top: 1rem; display: flex; justify-content: center; }
-    img { max-width: 100%; border-radius: 12px; }
+    :root { 
+      --bg: #0f172a; 
+      --card: #1e293b; 
+      --text: #e5e7eb; 
+      --accent: #8b5cf6; 
+      --accent-hover: #a78bfa;
+      --success: #10b981;
+      --border: #334155;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body { 
+      margin: 0; 
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: var(--text); 
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+    
+    .container { 
+      max-width: 900px; 
+      margin: 0 auto;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    .header h1 {
+      font-size: 2.5rem;
+      margin: 0 0 0.5rem;
+      background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .header p {
+      opacity: 0.7;
+      margin: 0;
+    }
+    
+    .card { 
+      background: var(--card); 
+      border-radius: 16px; 
+      padding: 2rem; 
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    
+    /* Drag and Drop Zone */
+    .dropzone {
+      border: 3px dashed var(--border);
+      border-radius: 12px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: rgba(139, 92, 246, 0.05);
+      margin-bottom: 1.5rem;
+    }
+    
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(139, 92, 246, 0.15);
+      transform: scale(1.02);
+    }
+    
+    .dropzone:hover {
+      border-color: var(--accent-hover);
+      background: rgba(139, 92, 246, 0.1);
+    }
+    
+    .dropzone-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 1rem;
+      opacity: 0.5;
+    }
+    
+    .dropzone h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.25rem;
+    }
+    
+    .dropzone p {
+      margin: 0;
+      opacity: 0.7;
+      font-size: 0.9rem;
+    }
+    
+    .dropzone input[type="file"] {
+      display: none;
+    }
+    
+    .browse-btn {
+      display: inline-block;
+      margin-top: 1rem;
+      background: var(--accent);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+    
+    .browse-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+    }
+    
+    /* Options */
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .option-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .option-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      opacity: 0.9;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .option-group input,
+    .option-group select {
+      padding: 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: var(--text);
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+    
+    .option-group input:focus,
+    .option-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    }
+    
+    /* Submit Button */
+    .submit-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+      color: white;
+      border: none;
+      padding: 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 1rem;
+    }
+    
+    .submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
+    }
+    
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* Status */
+    .status {
+      text-align: center;
+      padding: 0.75rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+    
+    .status.loading {
+      background: rgba(139, 92, 246, 0.1);
+      color: var(--accent-hover);
+    }
+    
+    .status.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+    
+    .status.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+    }
+    
+    /* Preview */
+    .preview-container {
+      display: none;
+      margin-top: 1.5rem;
+    }
+    
+    .preview-container.active {
+      display: block;
+    }
+    
+    .preview-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    
+    .preview-item {
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 1rem;
+      border: 1px solid var(--border);
+    }
+    
+    .preview-item h4 {
+      margin: 0 0 0.75rem;
+      font-size: 0.9rem;
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .preview-item img {
+      width: 100%;
+      border-radius: 8px;
+      display: block;
+    }
+    
+    .image-info {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      opacity: 0.7;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    @media (max-width: 768px) {
+      .preview-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .options {
+        grid-template-columns: 1fr;
+      }
+      
+      .header h1 {
+        font-size: 2rem;
+      }
+    }
+    
+    /* Selected File Display */
+    .selected-file {
+      display: none;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      align-items: center;
+      gap: 1rem;
+    }
+    
+    .selected-file.active {
+      display: flex;
+    }
+    
+    .selected-file-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    
+    .selected-file-info {
+      flex: 1;
+    }
+    
+    .selected-file-name {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    
+    .selected-file-size {
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    
+    .remove-file-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    
+    .remove-file-btn:hover {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: #ef4444;
+      color: #ef4444;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="container">
+    <div class="header">
+      <h1>🎨 ImageKit</h1>
+      <p>Upload, transform, and optimize your images instantly</p>
+    </div>
+    
     <div class="card">
-      <h1>ImageKit Frontend</h1>
-      <form id="form">
-        <div class="full">
-          <label>Source URL</label>
-          <input type="url" id="url" placeholder="https://example.com/image.jpg" required />
+      <!-- Drag and Drop Zone -->
+      <div class="dropzone" id="dropzone">
+        <svg class="dropzone-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+        <h3>Drag & Drop your image here</h3>
+        <p>or</p>
+        <button class="browse-btn" type="button" onclick="document.getElementById('fileInput').click()">
+          Browse Files
+        </button>
+        <input type="file" id="fileInput" accept="image/*" />
+      </div>
+      
+      <!-- Selected File Display -->
+      <div class="selected-file" id="selectedFile">
+        <div class="selected-file-icon">
+          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
         </div>
-        <div>
-          <label>Width (w)</label>
-          <input type="number" id="w" min="1" placeholder="e.g., 400" />
+        <div class="selected-file-info">
+          <div class="selected-file-name" id="fileName"></div>
+          <div class="selected-file-size" id="fileSize"></div>
         </div>
-        <div>
-          <label>Height (h)</label>
-          <input type="number" id="h" min="1" placeholder="optional" />
+        <button class="remove-file-btn" id="removeFile">Remove</button>
+      </div>
+      
+      <!-- Transformation Options -->
+      <div class="options">
+        <div class="option-group">
+          <label>Width</label>
+          <input type="number" id="width" min="1" placeholder="e.g., 800" />
         </div>
-        <div>
-          <label>Format (f)</label>
-          <select id="f">
-            <option value="webp" selected>webp</option>
-            <option value="jpeg">jpeg</option>
-            <option value="avif">avif</option>
+        <div class="option-group">
+          <label>Height</label>
+          <input type="number" id="height" min="1" placeholder="Auto" />
+        </div>
+        <div class="option-group">
+          <label>Format</label>
+          <select id="format">
+            <option value="webp" selected>WebP</option>
+            <option value="jpeg">JPEG</option>
+            <option value="avif">AVIF</option>
           </select>
         </div>
-        <div>
-          <label>Quality (q)</label>
-          <input type="number" id="q" min="1" max="100" value="80" />
+        <div class="option-group">
+          <label>Quality</label>
+          <input type="number" id="quality" min="1" max="100" value="80" />
         </div>
-        <div class="full" style="display:flex; gap:0.75rem; align-items:center;">
-          <button type="submit">Generate & Preview</button>
-          <span id="status" aria-live="polite"></span>
-        </div>
-      </form>
-      <div class="result" id="result" hidden>
-        <div>Signed URL:</div>
-        <a id="signedUrl" href="#" target="_blank" rel="noopener noreferrer"></a>
       </div>
-      <div class="preview">
-        <img id="preview" alt="Transformed preview" />
+      
+      <!-- Submit Button -->
+      <button class="submit-btn" id="submitBtn" disabled>
+        Select an image to transform
+      </button>
+      
+      <!-- Status Message -->
+      <div class="status" id="status" style="display: none;"></div>
+      
+      <!-- Preview -->
+      <div class="preview-container" id="previewContainer">
+        <h3 class="preview-title">Preview</h3>
+        <div class="preview-grid">
+          <div class="preview-item">
+            <h4>Original</h4>
+            <img id="originalPreview" alt="Original" />
+            <div class="image-info">
+              <span id="originalSize"></span>
+              <span id="originalDimensions"></span>
+            </div>
+          </div>
+          <div class="preview-item">
+            <h4>Transformed</h4>
+            <img id="transformedPreview" alt="Transformed" />
+            <div class="image-info">
+              <span id="transformedSize"></span>
+              <span id="transformedDimensions"></span>
+            </div>
+          </div>
+        </div>
       </div>
-      <hr style="border:none; border-top:1px solid #374151; margin:1rem 0;" />
-      <form id="uploadForm" class="full" style="display:grid; grid-template-columns: 1fr auto; gap:0.75rem; align-items:center;">
-        <div class="full">
-          <label>Upload Image</label>
-          <input type="file" id="file" accept="image/*" />
-        </div>
-        <div class="full" style="display:flex; gap:0.75rem; align-items:center;">
-          <button type="submit">Upload & Preview</button>
-          <span id="uploadStatus" aria-live="polite"></span>
-        </div>
-      </form>
     </div>
   </div>
+  
   <script>
-    const form = document.getElementById('form');
+    let selectedFile = null;
+    
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const selectedFileEl = document.getElementById('selectedFile');
+    const fileNameEl = document.getElementById('fileName');
+    const fileSizeEl = document.getElementById('fileSize');
+    const removeFileBtn = document.getElementById('removeFile');
+    const submitBtn = document.getElementById('submitBtn');
     const statusEl = document.getElementById('status');
-    const resultEl = document.getElementById('result');
-    const signedUrlEl = document.getElementById('signedUrl');
-    const previewEl = document.getElementById('preview');
-    const uploadForm = document.getElementById('uploadForm');
-    const uploadStatusEl = document.getElementById('uploadStatus');
-    const fileEl = document.getElementById('file');
-
-    form.addEventListener('submit', async (e) => {
+    const previewContainer = document.getElementById('previewContainer');
+    const originalPreview = document.getElementById('originalPreview');
+    const transformedPreview = document.getElementById('transformedPreview');
+    const originalSize = document.getElementById('originalSize');
+    const originalDimensions = document.getElementById('originalDimensions');
+    const transformedSize = document.getElementById('transformedSize');
+    const transformedDimensions = document.getElementById('transformedDimensions');
+    
+    // Drag and drop events
+    dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
-      statusEl.textContent = 'Signing…';
-      resultEl.hidden = true;
-      previewEl.removeAttribute('src');
-
-      const url = document.getElementById('url').value.trim();
-      const w = document.getElementById('w').value.trim();
-      const h = document.getElementById('h').value.trim();
-      const f = document.getElementById('f').value.trim();
-      const q = document.getElementById('q').value.trim();
-
-      const params = new URLSearchParams();
-      params.set('url', url);
-      if (w) params.set('w', w);
-      if (h) params.set('h', h);
-      if (f) params.set('f', f);
-      if (q) params.set('q', q);
-
-      try {
-        const resp = await fetch(`/sign?${params.toString()}`);
-        if (!resp.ok) throw new Error(`Sign failed: ${resp.status}`);
-        const data = await resp.json();
-        const { signed_url } = data;
-        signedUrlEl.textContent = `${location.origin}${signed_url}`;
-        signedUrlEl.href = signed_url;
-        resultEl.hidden = false;
-        previewEl.src = signed_url;
-        statusEl.textContent = 'Done';
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = 'Error signing request';
+      dropzone.classList.add('dragover');
+    });
+    
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
       }
     });
-
-    uploadForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      uploadStatusEl.textContent = 'Uploading…';
-      resultEl.hidden = true; // hide signed URL block
-
-      const file = fileEl.files && fileEl.files[0];
-      if (!file) {
-        uploadStatusEl.textContent = 'Select an image file';
+    
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+    
+    // Remove file
+    removeFileBtn.addEventListener('click', () => {
+      selectedFile = null;
+      fileInput.value = '';
+      selectedFileEl.classList.remove('active');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Select an image to transform';
+      previewContainer.classList.remove('active');
+      statusEl.style.display = 'none';
+    });
+    
+    // Handle file selection
+    function handleFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showStatus('Please select an image file', 'error');
         return;
       }
-
-      const w = document.getElementById('w').value.trim();
-      const h = document.getElementById('h').value.trim();
-      const f = document.getElementById('f').value.trim();
-      const q = document.getElementById('q').value.trim();
-
-      const fd = new FormData();
-      fd.set('file', file);
-      if (w) fd.set('w', w);
-      if (h) fd.set('h', h);
-      if (f) fd.set('f', f);
-      if (q) fd.set('q', q);
-
+      
+      selectedFile = file;
+      fileNameEl.textContent = file.name;
+      fileSizeEl.textContent = formatBytes(file.size);
+      selectedFileEl.classList.add('active');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Transform Image';
+      
+      // Show original preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        originalPreview.src = e.target.result;
+        const img = new Image();
+        img.onload = () => {
+          originalSize.textContent = formatBytes(file.size);
+          originalDimensions.textContent = `${img.width} × ${img.height}`;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+      
+      statusEl.style.display = 'none';
+    }
+    
+    // Transform and upload
+    submitBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      
+      showStatus('Transforming image...', 'loading');
+      submitBtn.disabled = true;
+      
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      
+      const width = document.getElementById('width').value;
+      const height = document.getElementById('height').value;
+      const format = document.getElementById('format').value;
+      const quality = document.getElementById('quality').value;
+      
+      if (width) formData.append('w', width);
+      if (height) formData.append('h', height);
+      if (format) formData.append('f', format);
+      if (quality) formData.append('q', quality);
+      
       try {
-        const resp = await fetch('/upload', { method: 'POST', body: fd });
-        if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
-        const blob = await resp.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        previewEl.src = objectUrl;
-        uploadStatusEl.textContent = 'Done';
-      } catch (err) {
-        console.error(err);
-        uploadStatusEl.textContent = 'Error uploading image';
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        
+        transformedPreview.src = url;
+        transformedSize.textContent = formatBytes(blob.size);
+        
+        const img = new Image();
+        img.onload = () => {
+          transformedDimensions.textContent = `${img.width} × ${img.height}`;
+          previewContainer.classList.add('active');
+          
+          const savings = ((1 - blob.size / selectedFile.size) * 100).toFixed(1);
+          showStatus(`✓ Transformed successfully! Saved ${savings}% file size`, 'success');
+        };
+        img.src = url;
+        
+        submitBtn.disabled = false;
+        
+      } catch (error) {
+        console.error(error);
+        showStatus('Failed to transform image. Please try again.', 'error');
+        submitBtn.disabled = false;
       }
     });
+    
+    function showStatus(message, type) {
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+      statusEl.style.display = 'block';
+    }
+    
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
   </script>
 </body>
 </html>

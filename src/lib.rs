@@ -11,7 +11,6 @@ use axum::extract::Multipart;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 use thiserror::Error;
-use tokio_util::io::ReaderStream;
 use hmac::Hmac;
 use hmac::Mac;
 use sha2::Sha256;
@@ -27,10 +26,10 @@ pub mod fetch;
 pub mod metrics;
 
 use crate::cache::{Cache, DiskCache};
-use crate::config::{ImageFormat, ImageKitConfig};
+use crate::config::{ImageFormat, ImageKitConfig, DEFAULT_QUALITY, DEFAULT_CACHE_CONTROL, NO_CACHE_CONTROL};
 use crate::fetch::fetch_source;
 use crate::signature::verify_signature;
-use crate::transform::{encode_image, resize_image, ImageBytes};
+use crate::transform::{encode_image, resize_image, decode_image};
 
 #[derive(Error, Debug)]
 pub enum ImageKitError {
@@ -134,30 +133,35 @@ async fn handler(
 
     // Build cache and key
     let cache = DiskCache::new(state.cache_dir.clone());
+    let canonical_params = canonical_params(&map);
     let key = cache.key_for(&map);
 
-    if let Some(path) = cache.get(&key).await.map_err(|e| e.to_string()).ok().flatten() {
-        // Cache hit: stream file
+    if let Some(data) = cache.get(&key).await.map_err(|e| e.to_string()).ok().flatten() {
+        // Cache hit: return data directly
         tracing::info!("Cache hit for key={}", key);
-        let file = match tokio::fs::File::open(&path).await { 
-            Ok(f) => f, 
-            Err(e) => {
-                tracing::error!("Cache read error for key={}: {}", key, e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Cache read error").into_response();
-            }
-        };
-        let stream = ReaderStream::new(file);
+        METRICS.cache_hits.fetch_add(1, Ordering::Relaxed);  // Track cache hit
+        
         let etag = cache.etag_for(&key);
+        
+        // Determine format from query or default
+        let format = query.f.unwrap_or_else(|| state.default_format.unwrap_or(ImageFormat::webp));
+        let content_type = match format {
+            ImageFormat::webp => "image/webp",
+            ImageFormat::jpeg => "image/jpeg",
+            ImageFormat::avif => "image/avif",
+        };
+        
         let mut headers = HeaderMap::new();
-        headers.insert("Cache-Control", HeaderValue::from_static("public, max-age=31536000, immutable"));
+        headers.insert("Cache-Control", HeaderValue::from_static(DEFAULT_CACHE_CONTROL));
         headers.insert("ETag", HeaderValue::from_str(&etag).unwrap_or(HeaderValue::from_static("")));
-        let content_type = cache.content_type_for_path(&path).unwrap_or("application/octet-stream".into());
-        headers.insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_str(&content_type).unwrap());
-        return (headers, Body::from_stream(stream)).into_response();
+        headers.insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+        return (headers, Body::from(data)).into_response();
     }
 
     // Cache miss: fetch, transform, cache, stream
     tracing::info!("Cache miss for key={}, fetching from {}", key, query.url);
+    METRICS.cache_misses.fetch_add(1, Ordering::Relaxed);  // Track cache miss
+    METRICS.transforms.fetch_add(1, Ordering::Relaxed);     // Track transformation
     let max_size = state.max_input_size;
     let allowed = state.allowed_formats.clone();
     let (bytes, _content_type) = match fetch_source(&query.url, max_size, &allowed).await {
@@ -168,7 +172,7 @@ async fn handler(
         }
     };
 
-    let (img, _orig_format) = match ImageBytes::decode(&bytes) {
+    let (img, _orig_format) = match decode_image(&bytes) {
         Ok(d) => d,
         Err(e) => return (StatusCode::BAD_REQUEST, format!("Decode error: {}", e)).into_response(),
     };
@@ -179,31 +183,31 @@ async fn handler(
     };
 
     let target_format = query.f.unwrap_or_else(|| state.default_format.unwrap_or(ImageFormat::webp));
-    let quality = query.q.unwrap_or(80);
+    let quality = query.q.unwrap_or(DEFAULT_QUALITY);
 
     let encoded = match encode_image(&resized, target_format, quality) {
         Ok(b) => b,
         Err(e) => return (StatusCode::BAD_REQUEST, format!("Encode error: {}", e)).into_response(),
     };
 
-    let path = match cache.put(&key, &encoded, target_format).await {
-        Ok(p) => p,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache write error: {}", e)).into_response(),
-    };
+    // Store in cache
+    if let Err(e) = cache.put(&key, &encoded, target_format, &canonical_params).await {
+        tracing::warn!("Failed to cache transformed image: {}", e);
+        // Continue anyway - we can still serve the image
+    }
 
-    let file = match tokio::fs::File::open(&path).await { Ok(f) => f, Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "File open error").into_response() };
-    let stream = ReaderStream::new(file);
+    // Return the encoded image directly
     let etag = cache.etag_for(&key);
     let mut headers = HeaderMap::new();
-    headers.insert("Cache-Control", HeaderValue::from_static("public, max-age=31536000, immutable"));
+    headers.insert("Cache-Control", HeaderValue::from_static(DEFAULT_CACHE_CONTROL));
     headers.insert("ETag", HeaderValue::from_str(&etag).unwrap_or(HeaderValue::from_static("")));
-    let ct = match target_format {
-        crate::config::ImageFormat::webp => "image/webp",
-        crate::config::ImageFormat::jpeg => "image/jpeg",
-        crate::config::ImageFormat::avif => "image/avif",
+    let content_type = match target_format {
+        ImageFormat::webp => "image/webp",
+        ImageFormat::jpeg => "image/jpeg",
+        ImageFormat::avif => "image/avif",
     };
-    headers.insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_static(ct));
-    (headers, Body::from_stream(stream)).into_response()
+    headers.insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    (headers, Body::from(encoded)).into_response()
 }
 
 async fn sign_handler(
@@ -274,7 +278,7 @@ async fn upload_handler(
     }
 
     let bytes = match file_bytes { Some(b) => b, None => return (StatusCode::BAD_REQUEST, "Missing file").into_response() };
-    let (img, _orig_format) = match ImageBytes::decode(&bytes) {
+    let (img, _orig_format) = match decode_image(&bytes) {
         Ok(d) => d,
         Err(e) => return (StatusCode::BAD_REQUEST, format!("Decode error: {}", e)).into_response(),
     };
@@ -285,7 +289,7 @@ async fn upload_handler(
     };
 
     let target_format = f.unwrap_or_else(|| state.default_format.unwrap_or(ImageFormat::webp));
-    let quality = q.unwrap_or(80);
+    let quality = q.unwrap_or(DEFAULT_QUALITY);
 
     let encoded = match encode_image(&resized, target_format, quality) {
         Ok(b) => b,
@@ -300,19 +304,144 @@ async fn upload_handler(
 
     let mut headers = HeaderMap::new();
     headers.insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_static(ct));
-    headers.insert("Cache-Control", HeaderValue::from_static("no-store"));
+    headers.insert("Cache-Control", HeaderValue::from_static(NO_CACHE_CONTROL));
     (headers, Body::from(encoded)).into_response()
+}
+
+// ====================================================================================
+// OBSERVABILITY - Phase 4
+// ====================================================================================
+
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Global metrics tracking
+pub struct Metrics {
+    pub cache_hits: AtomicU64,
+    pub cache_misses: AtomicU64,
+    pub transforms: AtomicU64,
+    pub errors: AtomicU64,
+}
+
+impl Metrics {
+    pub fn new() -> Self {
+        Self {
+            cache_hits: AtomicU64::new(0),
+            cache_misses: AtomicU64::new(0),
+            transforms: AtomicU64::new(0),
+            errors: AtomicU64::new(0),
+        }
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref METRICS: Metrics = Metrics::new();
+}
+
+/// Health check endpoint
+async fn health_handler() -> impl IntoResponse {
+    use serde_json::json;
+    
+    Json(json!({
+        "status": "healthy",
+        "version": env!("CARGO_PKG_VERSION"),
+        "service": "imagekit"
+    }))
+}
+
+/// Cache statistics endpoint
+async fn cache_stats_handler(
+    axum::extract::State(state): axum::extract::State<Arc<ImageKitConfig>>,
+) -> impl IntoResponse {
+    use crate::cache::SledCache;
+    
+    match SledCache::new(&state.cache_dir, state.max_cache_size) {
+        Ok(cache) => {
+            let stats = cache.stats().await;
+            
+            // Calculate hit rate
+            let hits = METRICS.cache_hits.load(Ordering::Relaxed);
+            let misses = METRICS.cache_misses.load(Ordering::Relaxed);
+            let total_requests = hits + misses;
+            let hit_rate = if total_requests > 0 {
+                (hits as f64 / total_requests as f64) * 100.0
+            } else {
+                0.0
+            };
+            
+            use serde_json::json;
+            Json(json!({
+                "cache": {
+                    "total_size_bytes": stats.total_size_bytes,
+                    "total_size_mb": stats.total_size_bytes as f64 / 1024.0 / 1024.0,
+                    "entry_count": stats.entry_count,
+                    "max_size_bytes": stats.max_size_bytes,
+                    "max_size_mb": stats.max_size_bytes as f64 / 1024.0 / 1024.0,
+                    "usage_percent": (stats.total_size_bytes as f64 / stats.max_size_bytes as f64) * 100.0,
+                },
+                "requests": {
+                    "cache_hits": hits,
+                    "cache_misses": misses,
+                    "total": total_requests,
+                    "hit_rate_percent": hit_rate,
+                },
+                "transforms": {
+                    "total": METRICS.transforms.load(Ordering::Relaxed),
+                    "errors": METRICS.errors.load(Ordering::Relaxed),
+                }
+            })).into_response()
+        },
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache error: {}", e)).into_response()
+        }
+    }
+}
+
+/// Metrics endpoint (Prometheus-compatible plain text)
+async fn metrics_handler() -> impl IntoResponse {
+    let hits = METRICS.cache_hits.load(Ordering::Relaxed);
+    let misses = METRICS.cache_misses.load(Ordering::Relaxed);
+    let transforms = METRICS.transforms.load(Ordering::Relaxed);
+    let errors = METRICS.errors.load(Ordering::Relaxed);
+    
+    let metrics = format!(
+        "# HELP imagekit_cache_hits_total Total number of cache hits\n\
+         # TYPE imagekit_cache_hits_total counter\n\
+         imagekit_cache_hits_total {}\n\
+         # HELP imagekit_cache_misses_total Total number of cache misses\n\
+         # TYPE imagekit_cache_misses_total counter\n\
+         imagekit_cache_misses_total {}\n\
+         # HELP imagekit_transforms_total Total number of image transformations\n\
+         # TYPE imagekit_transforms_total counter\n\
+         imagekit_transforms_total {}\n\
+         # HELP imagekit_errors_total Total number of errors\n\
+         # TYPE imagekit_errors_total counter\n\
+         imagekit_errors_total {}\n",
+        hits, misses, transforms, errors
+    );
+    
+    (
+        StatusCode::OK,
+        [("Content-Type", "text/plain; version=0.0.4")],
+        metrics
+    )
 }
 
 pub fn router(config: ImageKitConfig) -> Router {
     let state = Arc::new(config);
     
-    let mut app = Router::new()
+    // Observability endpoints - NO rate limiting
+    let observability_routes = Router::new()
+        .route("/health", get(health_handler))
+        .route("/stats/cache", get(cache_stats_handler).with_state(state.clone()))
+        .route("/metrics", get(metrics_handler));
+    
+    // Transformation endpoints - WITH rate limiting
+    let mut transform_routes = Router::new()
         .route("/img", get(handler).with_state(state.clone()))
         .route("/upload", axum::routing::post(upload_handler).with_state(state.clone()))
         .route("/sign", get(sign_handler).with_state(state.clone()));
     
-    // Only add rate limiting if not disabled (useful for testing)
+    // Only add rate limiting to transformation endpoints if not disabled
     if std::env::var("DISABLE_RATE_LIMIT").is_err() {
         // Configure rate limiting: 10 req/sec per IP, burst of 30
         let governor_conf = Box::new(
@@ -325,12 +454,16 @@ pub fn router(config: ImageKitConfig) -> Router {
         
         tracing::info!("Router configured with rate limiting: 10/sec, burst 30");
         
-        app = app.layer(GovernorLayer {
+        transform_routes = transform_routes.layer(GovernorLayer {
             config: Box::leak(governor_conf),
         });
     } else {
         tracing::info!("Rate limiting disabled");
     }
     
-    app.nest_service("/", ServeDir::new("frontend"))
+    // Combine routes and add static file serving
+    Router::new()
+        .merge(observability_routes)
+        .merge(transform_routes)
+        .nest_service("/", ServeDir::new("frontend"))
 }

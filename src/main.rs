@@ -19,6 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         secret: std::env::var("IMAGEKIT_SECRET").unwrap_or_else(|_| "local-dev-secret".into()),
         cache_dir: std::path::PathBuf::from("./cache"),
         max_input_size: 8 * 1024 * 1024,
+        max_cache_size: Some(10 * 1024 * 1024 * 1024), // 10GB cache limit
         allowed_formats: vec![ImageFormat::jpeg, ImageFormat::webp, ImageFormat::avif],
         default_format: Some(ImageFormat::webp),
     };
