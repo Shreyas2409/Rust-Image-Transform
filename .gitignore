@@ -21,9 +21,8 @@ debug/
 *.swo
 *~
 
-# Cache directories
-cache/
-/cache
+# Runtime cache directory (not src/cache source code)
+/cache/
 
 # Logs
 *.log
