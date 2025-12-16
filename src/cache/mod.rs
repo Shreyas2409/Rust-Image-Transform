@@ -1,9 +1,11 @@
 // Re-export modules
 pub mod disk;
 pub mod sled_cache;
+pub mod cloudflare;
 
 pub use disk::DiskCache;
 pub use sled_cache::{SledCache, CacheStats};
+pub use cloudflare::{CloudflareCacheConfig, cloudflare_cache_middleware};
 
 use crate::config::ImageFormat;
 use std::collections::BTreeMap;

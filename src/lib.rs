@@ -427,19 +427,24 @@ async fn metrics_handler() -> impl IntoResponse {
 }
 
 pub fn router(config: ImageKitConfig) -> Router {
+    use crate::cache::cloudflare_cache_middleware;
+    use axum::middleware;
+    
     let state = Arc::new(config);
     
-    // Observability endpoints - NO rate limiting
+    // Observability endpoints - NO rate limiting, NO caching
     let observability_routes = Router::new()
         .route("/health", get(health_handler))
         .route("/stats/cache", get(cache_stats_handler).with_state(state.clone()))
         .route("/metrics", get(metrics_handler));
     
-    // Transformation endpoints - WITH rate limiting
+    // Transformation endpoints - WITH rate limiting AND Cloudflare caching
     let mut transform_routes = Router::new()
         .route("/img", get(handler).with_state(state.clone()))
         .route("/upload", axum::routing::post(upload_handler).with_state(state.clone()))
-        .route("/sign", get(sign_handler).with_state(state.clone()));
+        .route("/sign", get(sign_handler).with_state(state.clone()))
+        // Add Cloudflare caching middleware to all transformation endpoints
+        .layer(middleware::from_fn(cloudflare_cache_middleware));
     
     // Only add rate limiting to transformation endpoints if not disabled
     if std::env::var("DISABLE_RATE_LIMIT").is_err() {
@@ -460,6 +465,8 @@ pub fn router(config: ImageKitConfig) -> Router {
     } else {
         tracing::info!("Rate limiting disabled");
     }
+    
+    tracing::info!("Cloudflare edge caching enabled (1 day edge, 1 year browser)");
     
     // Combine routes and add static file serving
     Router::new()

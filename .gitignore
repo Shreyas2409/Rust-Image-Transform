@@ -45,6 +45,10 @@ IMPLEMENTATION_SUMMARY.md
 STATUS.md
 COMPLETE_IMPLEMENTATION.md
 
+# Generated documentation from Cloudflare caching implementation (Dec 16, 2025)
+CLOUDFLARE_IMPLEMENTATION.md
+PROFESSIONAL_COMMENTS_UPDATE.md
+
 # Render deployment (optional - uncomment if you want to keep render.yaml private)
 # render.yaml
 
